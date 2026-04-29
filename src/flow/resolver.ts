@@ -1,7 +1,15 @@
+import { readFileSync } from 'node:fs';
+
+import { parse } from 'yaml';
+
 import type { FlowDefinition, ResolvedRequest } from '../types.js';
 import { ValidationError } from '../lib/errors.js';
 
 type CollectionItem = Record<string, unknown>;
+type OperationMatch = {
+  method: string;
+  path: string;
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -17,6 +25,40 @@ function getRequestDescription(item: CollectionItem): string {
   if (typeof request.description === 'string') return request.description;
   const description = asRecord(request.description);
   return typeof description?.content === 'string' ? description.content : '';
+}
+
+function getRequestMethod(item: CollectionItem): string {
+  const request = asRecord(item.request);
+  return typeof request?.method === 'string' ? request.method.toUpperCase() : '';
+}
+
+function normalizePathTemplate(value: string): string {
+  return value
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^\{\{[^}]+\}\}/, '')
+    .replace(/:[^/]+/g, '{}')
+    .replace(/\{[^/]+\}/g, '{}')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '') || '/';
+}
+
+function getRequestPath(item: CollectionItem): string {
+  const request = asRecord(item.request);
+  const url = request?.url;
+  if (typeof url === 'string') {
+    return normalizePathTemplate(url);
+  }
+
+  const urlRecord = asRecord(url);
+  if (!urlRecord) return '';
+  if (typeof urlRecord.raw === 'string') {
+    return normalizePathTemplate(urlRecord.raw);
+  }
+  const pathSegments = Array.isArray(urlRecord.path) ? urlRecord.path.map(String).join('/') : '';
+  if (pathSegments) {
+    return normalizePathTemplate(`/${pathSegments}`);
+  }
+  return '';
 }
 
 function flattenRequestItems(node: CollectionItem): CollectionItem[] {
@@ -45,11 +87,59 @@ function matchesOperationId(item: CollectionItem, operationId: string): boolean 
   );
 }
 
-export function resolveFlowRequests(flow: FlowDefinition, generatedCollection: CollectionItem): ResolvedRequest[] {
+function loadOperationMatches(specPath?: string): Map<string, OperationMatch> {
+  if (!specPath) {
+    return new Map();
+  }
+
+  const document = parse(readFileSync(specPath, 'utf8')) as Record<string, unknown> | null;
+  const paths = asRecord(document?.paths);
+  if (!paths) {
+    return new Map();
+  }
+
+  const operationMatches = new Map<string, OperationMatch>();
+  for (const [specPathKey, pathItem] of Object.entries(paths)) {
+    const pathRecord = asRecord(pathItem);
+    if (!pathRecord) continue;
+    for (const [method, operation] of Object.entries(pathRecord)) {
+      const operationRecord = asRecord(operation);
+      const operationId = typeof operationRecord?.operationId === 'string' ? operationRecord.operationId : '';
+      if (!operationId) continue;
+      operationMatches.set(operationId, {
+        method: method.toUpperCase(),
+        path: normalizePathTemplate(specPathKey)
+      });
+    }
+  }
+
+  return operationMatches;
+}
+
+function matchesOperationByRequestShape(item: CollectionItem, operationMatch?: OperationMatch): boolean {
+  if (!operationMatch) {
+    return false;
+  }
+  return (
+    getRequestMethod(item) === operationMatch.method &&
+    getRequestPath(item) === operationMatch.path
+  );
+}
+
+export function resolveFlowRequests(
+  flow: FlowDefinition,
+  generatedCollection: CollectionItem,
+  specPath?: string
+): ResolvedRequest[] {
   const requestItems = flattenRequestItems(generatedCollection);
+  const operationMatches = loadOperationMatches(specPath);
 
   return flow.steps.map((step) => {
-    const match = requestItems.find((item) => matchesOperationId(item, step.operationId));
+    const match = requestItems.find(
+      (item) =>
+        matchesOperationId(item, step.operationId) ||
+        matchesOperationByRequestShape(item, operationMatches.get(step.operationId))
+    );
     if (!match) {
       throw new ValidationError(`Could not resolve operationId "${step.operationId}" in the generated temporary Smoke collection.`);
     }

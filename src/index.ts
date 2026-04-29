@@ -92,7 +92,7 @@ export async function runSmokeFlow(
     dependencies.core.info(`Generated temporary Smoke collection ${tempCollectionId}`);
 
     const generatedCollection = await dependencies.postman.getCollection(tempCollectionId);
-    const resolvedRequests = resolveFlowRequests(flow, generatedCollection);
+    const resolvedRequests = resolveFlowRequests(flow, generatedCollection, inputs.specPath);
     const transformed = buildCuratedSmokeCollection(generatedCollection, flow, resolvedRequests);
     await dependencies.postman.updateCollection(inputs.smokeCollectionId, transformed.collection);
     dependencies.core.info(`Updated canonical Smoke collection ${inputs.smokeCollectionId} from curated flow.`);

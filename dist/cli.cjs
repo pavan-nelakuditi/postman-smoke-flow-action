@@ -27010,7 +27010,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse2(src, reviver, options) {
+    function parse3(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -27051,7 +27051,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports2.parse = parse2;
+    exports2.parse = parse3;
     exports2.parseAllDocuments = parseAllDocuments;
     exports2.parseDocument = parseDocument;
     exports2.stringify = stringify;
@@ -27192,6 +27192,8 @@ function loadFlowManifest(flowPath) {
 }
 
 // src/flow/resolver.ts
+var import_node_fs2 = require("node:fs");
+var import_yaml2 = __toESM(require_dist(), 1);
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
@@ -27204,6 +27206,30 @@ function getRequestDescription(item) {
   if (typeof request.description === "string") return request.description;
   const description = asRecord(request.description);
   return typeof description?.content === "string" ? description.content : "";
+}
+function getRequestMethod(item) {
+  const request = asRecord(item.request);
+  return typeof request?.method === "string" ? request.method.toUpperCase() : "";
+}
+function normalizePathTemplate(value) {
+  return value.replace(/^https?:\/\/[^/]+/i, "").replace(/^\{\{[^}]+\}\}/, "").replace(/:[^/]+/g, "{}").replace(/\{[^/]+\}/g, "{}").replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+}
+function getRequestPath(item) {
+  const request = asRecord(item.request);
+  const url = request?.url;
+  if (typeof url === "string") {
+    return normalizePathTemplate(url);
+  }
+  const urlRecord = asRecord(url);
+  if (!urlRecord) return "";
+  if (typeof urlRecord.raw === "string") {
+    return normalizePathTemplate(urlRecord.raw);
+  }
+  const pathSegments = Array.isArray(urlRecord.path) ? urlRecord.path.map(String).join("/") : "";
+  if (pathSegments) {
+    return normalizePathTemplate(`/${pathSegments}`);
+  }
+  return "";
 }
 function flattenRequestItems(node) {
   const results = [];
@@ -27222,10 +27248,44 @@ function matchesOperationId(item, operationId) {
   const description = getRequestDescription(item);
   return name === operationId || name.toLowerCase() === operationId.toLowerCase() || description.includes(operationId) || description.toLowerCase().includes(operationId.toLowerCase());
 }
-function resolveFlowRequests(flow, generatedCollection) {
+function loadOperationMatches(specPath) {
+  if (!specPath) {
+    return /* @__PURE__ */ new Map();
+  }
+  const document = (0, import_yaml2.parse)((0, import_node_fs2.readFileSync)(specPath, "utf8"));
+  const paths = asRecord(document?.paths);
+  if (!paths) {
+    return /* @__PURE__ */ new Map();
+  }
+  const operationMatches = /* @__PURE__ */ new Map();
+  for (const [specPathKey, pathItem] of Object.entries(paths)) {
+    const pathRecord = asRecord(pathItem);
+    if (!pathRecord) continue;
+    for (const [method, operation] of Object.entries(pathRecord)) {
+      const operationRecord = asRecord(operation);
+      const operationId = typeof operationRecord?.operationId === "string" ? operationRecord.operationId : "";
+      if (!operationId) continue;
+      operationMatches.set(operationId, {
+        method: method.toUpperCase(),
+        path: normalizePathTemplate(specPathKey)
+      });
+    }
+  }
+  return operationMatches;
+}
+function matchesOperationByRequestShape(item, operationMatch) {
+  if (!operationMatch) {
+    return false;
+  }
+  return getRequestMethod(item) === operationMatch.method && getRequestPath(item) === operationMatch.path;
+}
+function resolveFlowRequests(flow, generatedCollection, specPath) {
   const requestItems = flattenRequestItems(generatedCollection);
+  const operationMatches = loadOperationMatches(specPath);
   return flow.steps.map((step) => {
-    const match = requestItems.find((item) => matchesOperationId(item, step.operationId));
+    const match = requestItems.find(
+      (item) => matchesOperationId(item, step.operationId) || matchesOperationByRequestShape(item, operationMatches.get(step.operationId))
+    );
     if (!match) {
       throw new ValidationError(`Could not resolve operationId "${step.operationId}" in the generated temporary Smoke collection.`);
     }
@@ -27763,7 +27823,7 @@ async function runSmokeFlow(inputs, dependencies) {
     tempCollectionId = await dependencies.postman.generateCollection(inputs.specId, inputs.projectName, inputs.tempCollectionPrefix);
     dependencies.core.info(`Generated temporary Smoke collection ${tempCollectionId}`);
     const generatedCollection = await dependencies.postman.getCollection(tempCollectionId);
-    const resolvedRequests = resolveFlowRequests(flow, generatedCollection);
+    const resolvedRequests = resolveFlowRequests(flow, generatedCollection, inputs.specPath);
     const transformed = buildCuratedSmokeCollection(generatedCollection, flow, resolvedRequests);
     await dependencies.postman.updateCollection(inputs.smokeCollectionId, transformed.collection);
     dependencies.core.info(`Updated canonical Smoke collection ${inputs.smokeCollectionId} from curated flow.`);

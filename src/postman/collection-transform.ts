@@ -7,6 +7,12 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
 
+const VOLATILE_KEYS = new Set([
+  'createdAt',
+  'updatedAt',
+  'lastUpdatedBy'
+]);
+
 function sanitizeForCollectionUpdate(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeForCollectionUpdate);
@@ -18,7 +24,13 @@ function sanitizeForCollectionUpdate(value: unknown): unknown {
   const record = value as JsonRecord;
   const next: JsonRecord = {};
   for (const [key, child] of Object.entries(record)) {
-    if (key === 'uid' || key === '_postman_id') {
+    if (VOLATILE_KEYS.has(key)) {
+      continue;
+    }
+    if (key === 'id' && typeof child === 'string' && /^[0-9a-f-]{36}$/.test(child)) {
+      continue;
+    }
+    if (key === 'uid' && typeof child === 'string' && /^\d+-[0-9a-f-]{36}$/.test(child)) {
       continue;
     }
     next[key] = sanitizeForCollectionUpdate(child);

@@ -27508,6 +27508,11 @@ function createSecretsResolverItem() {
 function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
+var VOLATILE_KEYS = /* @__PURE__ */ new Set([
+  "createdAt",
+  "updatedAt",
+  "lastUpdatedBy"
+]);
 function sanitizeForCollectionUpdate(value) {
   if (Array.isArray(value)) {
     return value.map(sanitizeForCollectionUpdate);
@@ -27518,7 +27523,13 @@ function sanitizeForCollectionUpdate(value) {
   const record = value;
   const next = {};
   for (const [key, child] of Object.entries(record)) {
-    if (key === "uid" || key === "_postman_id") {
+    if (VOLATILE_KEYS.has(key)) {
+      continue;
+    }
+    if (key === "id" && typeof child === "string" && /^[0-9a-f-]{36}$/.test(child)) {
+      continue;
+    }
+    if (key === "uid" && typeof child === "string" && /^\d+-[0-9a-f-]{36}$/.test(child)) {
       continue;
     }
     next[key] = sanitizeForCollectionUpdate(child);

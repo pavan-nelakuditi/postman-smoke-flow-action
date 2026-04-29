@@ -27282,9 +27282,14 @@ function validateFlowManifest(manifest) {
           `Step ${step.stepKey} binding ${binding.fieldKey} must include sourceStepKey and variable when using prior_output.`
         );
       }
-      if ((binding.source === "literal" || binding.source === "example") && binding.value === void 0) {
+      if (binding.source === "literal" && binding.value === void 0) {
+        throw new ValidationError(
+          `Step ${step.stepKey} binding ${binding.fieldKey} must include value when using literal source.`
+        );
+      }
+      if (binding.source === "example" && binding.value !== void 0) {
         warnings.push({
-          message: `Step ${step.stepKey} binding ${binding.fieldKey} has no explicit value; the generated request may rely on existing scaffold defaults.`
+          message: `Step ${step.stepKey} binding ${binding.fieldKey} uses source=example; explicit value is ignored and the generated request example is preserved.`
         });
       }
     }
@@ -27327,7 +27332,7 @@ function buildPreRequestScript(step) {
       lines.push(`pm.collectionVariables.set(${quote(binding.fieldKey)}, pm.collectionVariables.get(${quote(binding.variable)}) || '');`);
       continue;
     }
-    if (binding.source === "literal" || binding.source === "example") {
+    if (binding.source === "literal") {
       lines.push(`pm.collectionVariables.set(${quote(binding.fieldKey)}, ${quote(binding.value ?? "")});`);
     }
   }
@@ -27455,11 +27460,15 @@ function setNestedValue(root, dottedKey, value) {
   }
   cursor[segments[segments.length - 1]] = value;
 }
+function getVariableBindings(step) {
+  return step.bindings.filter((binding) => binding.source !== "example");
+}
 function updateRequestUrl(request, step) {
+  const variableBindings = getVariableBindings(step);
   const url = request.url;
   if (typeof url === "string") {
     let next = url;
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       next = next.replace(new RegExp(`\\{${binding.fieldKey}\\}`, "g"), `{{${binding.fieldKey}}}`);
       next = next.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, "g"), `{{${binding.fieldKey}}}`);
     }
@@ -27472,7 +27481,7 @@ function updateRequestUrl(request, step) {
   }
   if (typeof urlRecord.raw === "string") {
     let nextRaw = urlRecord.raw;
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       nextRaw = nextRaw.replace(new RegExp(`\\{${binding.fieldKey}\\}`, "g"), `{{${binding.fieldKey}}}`);
       nextRaw = nextRaw.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, "g"), `{{${binding.fieldKey}}}`);
     }
@@ -27482,7 +27491,7 @@ function updateRequestUrl(request, step) {
     urlRecord.variable = urlRecord.variable.map((entry) => {
       const variable = asRecord2(entry) ?? {};
       const key = typeof variable.key === "string" ? variable.key : "";
-      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+      if (variableBindings.some((binding) => binding.fieldKey === key)) {
         variable.value = `{{${key}}}`;
       }
       return variable;
@@ -27492,7 +27501,7 @@ function updateRequestUrl(request, step) {
     urlRecord.query = urlRecord.query.map((entry) => {
       const query = asRecord2(entry) ?? {};
       const key = typeof query.key === "string" ? query.key : "";
-      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+      if (variableBindings.some((binding) => binding.fieldKey === key)) {
         query.value = `{{${key}}}`;
       }
       return query;
@@ -27500,6 +27509,7 @@ function updateRequestUrl(request, step) {
   }
 }
 function updateRequestBody(request, step) {
+  const variableBindings = getVariableBindings(step);
   const body = asRecord2(request.body);
   if (!body || body.mode !== "raw" || typeof body.raw !== "string") {
     return;
@@ -27507,12 +27517,12 @@ function updateRequestBody(request, step) {
   let raw = body.raw;
   try {
     const json = JSON.parse(raw);
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       setNestedValue(json, binding.fieldKey, `{{${binding.fieldKey}}}`);
     }
     raw = JSON.stringify(json, null, 2);
   } catch {
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       raw = raw.replace(new RegExp(`"${binding.fieldKey}"\\s*:\\s*"[^"]*"`, "g"), `"${binding.fieldKey}": "{{${binding.fieldKey}}}"`);
     }
   }
@@ -27693,8 +27703,9 @@ function parseBooleanInput(value, defaultValue) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 function getInput(name, env) {
-  const envName = `INPUT_${name.replace(/ /g, "_").replace(/-/g, "_").toUpperCase()}`;
-  return String(env[envName] ?? "").trim();
+  const canonicalEnvName = `INPUT_${name.replace(/ /g, "_").toUpperCase()}`;
+  const legacyEnvName = `INPUT_${name.replace(/ /g, "_").replace(/-/g, "_").toUpperCase()}`;
+  return String(env[canonicalEnvName] ?? env[legacyEnvName] ?? "").trim();
 }
 function readActionInputs(env = process.env) {
   return {

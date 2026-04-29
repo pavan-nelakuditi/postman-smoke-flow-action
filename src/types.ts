@@ -45,6 +45,7 @@ export type ActionInputs = {
   flowPath: string;
   postmanApiKey: string;
   specPath?: string;
+  debugDumpPath?: string;
   collectionSyncMode: 'refresh' | 'version';
   postmanAccessToken?: string;
   failOnFlowWarning: boolean;

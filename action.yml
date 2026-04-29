@@ -22,6 +22,9 @@ inputs:
   spec-path:
     description: Optional repo-root-relative path to the local OpenAPI spec for validation and debug context.
     required: false
+  debug-dump-path:
+    description: Optional repo-root-relative or absolute path to write the transformed collection JSON before update.
+    required: false
   collection-sync-mode:
     description: Collection lifecycle policy. Refresh is the supported v1 mode.
     required: false

@@ -1,4 +1,6 @@
 import core from '@actions/core';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 import { openAlphaActionContract } from './contracts.js';
 import { loadFlowManifest } from './flow/parser.js';
@@ -36,12 +38,26 @@ export function readActionInputs(env: NodeJS.ProcessEnv = process.env): ActionIn
     flowPath: getInput('flow-path', env),
     postmanApiKey: getInput('postman-api-key', env),
     specPath: getInput('spec-path', env) || undefined,
+    debugDumpPath: getInput('debug-dump-path', env) || undefined,
     collectionSyncMode: (getInput('collection-sync-mode', env) || 'refresh') as 'refresh' | 'version',
     postmanAccessToken: getInput('postman-access-token', env) || undefined,
     failOnFlowWarning: parseBooleanInput(getInput('fail-on-flow-warning', env), false),
     keepTempCollectionOnFailure: parseBooleanInput(getInput('keep-temp-collection-on-failure', env), false),
     tempCollectionPrefix: getInput('temp-collection-prefix', env) || '[Smoke][Temp]'
   };
+}
+
+function writeDebugDump(debugDumpPath: string | undefined, collection: unknown, actionCore: CoreLike): void {
+  if (!debugDumpPath) {
+    return;
+  }
+
+  const resolvedPath = path.isAbsolute(debugDumpPath)
+    ? debugDumpPath
+    : path.resolve(process.cwd(), debugDumpPath);
+  mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  writeFileSync(resolvedPath, `${JSON.stringify(collection, null, 2)}\n`, 'utf8');
+  actionCore.info(`Wrote transformed collection debug dump to ${resolvedPath}`);
 }
 
 function ensureRequiredInputs(inputs: ActionInputs): void {
@@ -94,6 +110,7 @@ export async function runSmokeFlow(
     const generatedCollection = await dependencies.postman.getCollection(tempCollectionId);
     const resolvedRequests = resolveFlowRequests(flow, generatedCollection, inputs.specPath);
     const transformed = buildCuratedSmokeCollection(generatedCollection, flow, resolvedRequests);
+    writeDebugDump(inputs.debugDumpPath, transformed.collection, dependencies.core);
     await dependencies.postman.updateCollection(inputs.smokeCollectionId, transformed.collection);
     dependencies.core.info(`Updated canonical Smoke collection ${inputs.smokeCollectionId} from curated flow.`);
 

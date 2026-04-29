@@ -27508,11 +27508,6 @@ function createSecretsResolverItem() {
 function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-var VOLATILE_KEYS = /* @__PURE__ */ new Set([
-  "createdAt",
-  "updatedAt",
-  "lastUpdatedBy"
-]);
 function sanitizeForCollectionUpdate(value) {
   if (Array.isArray(value)) {
     return value.map(sanitizeForCollectionUpdate);
@@ -27520,21 +27515,22 @@ function sanitizeForCollectionUpdate(value) {
   if (!value || typeof value !== "object") {
     return value;
   }
-  const record = value;
-  const next = {};
-  for (const [key, child] of Object.entries(record)) {
-    if (VOLATILE_KEYS.has(key)) {
-      continue;
-    }
-    if (key === "id" && typeof child === "string" && /^[0-9a-f-]{36}$/.test(child)) {
-      continue;
-    }
-    if (key === "uid" && typeof child === "string" && /^\d+-[0-9a-f-]{36}$/.test(child)) {
-      continue;
-    }
-    next[key] = sanitizeForCollectionUpdate(child);
+  const record = { ...value };
+  delete record.id;
+  delete record.uid;
+  delete record._postman_id;
+  delete record.response;
+  if (record.request && typeof record.request === "object" && record.request !== null) {
+    const request = { ...record.request };
+    delete request.id;
+    delete request.uid;
+    delete request._postman_id;
+    record.request = request;
   }
-  return next;
+  for (const [key, child] of Object.entries(record)) {
+    record[key] = sanitizeForCollectionUpdate(child);
+  }
+  return record;
 }
 function setNestedValue(root, dottedKey, value) {
   const segments = dottedKey.split(".");

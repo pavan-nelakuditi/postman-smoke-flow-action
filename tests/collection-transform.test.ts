@@ -32,8 +32,9 @@ const flow: FlowDefinition = {
 describe('collection transform', () => {
   it('builds a curated smoke collection with scripted requests', () => {
     const generatedCollection = {
-      info: { name: '[Smoke][Temp] Payments API', _postman_id: 'info-123', updatedAt: 'yesterday' },
-      uid: 'collection-uid-123',
+      info: { name: '[Smoke][Temp] Payments API', _postman_id: 'info-123' },
+      uid: '54270406-collection-uid-123',
+      response: [{ id: 'resp-123' }],
       item: []
     };
     const resolvedRequests: ResolvedRequest[] = [
@@ -69,9 +70,9 @@ describe('collection transform', () => {
     expect(result.bindingCount).toBe(1);
     expect(result.extractCount).toBe(1);
     expect((result.collection.info as Record<string, unknown>).name).toBe('[Smoke] Payments API happy path');
-    expect((result.collection.info as Record<string, unknown>)._postman_id).toBe('info-123');
-    expect((result.collection.info as Record<string, unknown>).updatedAt).toBeUndefined();
-    expect((result.collection as Record<string, unknown>).uid).toBe('collection-uid-123');
+    expect((result.collection.info as Record<string, unknown>)._postman_id).toBeUndefined();
+    expect((result.collection as Record<string, unknown>).uid).toBeUndefined();
+    expect((result.collection as Record<string, unknown>).response).toBeUndefined();
     expect(items[0]?.name).toBe('00 - Resolve Secrets');
     expect(items[2]?.request).toBeDefined();
     expect(JSON.stringify(items[2])).toContain('{{paymentId}}');

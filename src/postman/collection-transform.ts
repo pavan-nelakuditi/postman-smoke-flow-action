@@ -1,0 +1,136 @@
+import type { FlowDefinition, FlowStep, ResolvedRequest } from '../types.js';
+import { createPreRequestEvent, createSecretsResolverItem, createTestEvent, countAssertionsForStep } from './scripts.js';
+
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
+
+function setNestedValue(root: JsonRecord, dottedKey: string, value: unknown): void {
+  const segments = dottedKey.split('.');
+  let cursor: JsonRecord = root;
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const segment = segments[index]!;
+    const next = asRecord(cursor[segment]);
+    if (next) {
+      cursor = next;
+      continue;
+    }
+    cursor[segment] = {};
+    cursor = cursor[segment] as JsonRecord;
+  }
+  cursor[segments[segments.length - 1]!] = value;
+}
+
+function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
+  const url = request.url;
+  if (typeof url === 'string') {
+    let next = url;
+    for (const binding of step.bindings) {
+      next = next.replace(new RegExp(`\\{${binding.fieldKey}\\}`, 'g'), `{{${binding.fieldKey}}}`);
+      next = next.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, 'g'), `{{${binding.fieldKey}}}`);
+    }
+    request.url = next;
+    return;
+  }
+
+  const urlRecord = asRecord(url);
+  if (!urlRecord) {
+    return;
+  }
+
+  if (typeof urlRecord.raw === 'string') {
+    let nextRaw = urlRecord.raw;
+    for (const binding of step.bindings) {
+      nextRaw = nextRaw.replace(new RegExp(`\\{${binding.fieldKey}\\}`, 'g'), `{{${binding.fieldKey}}}`);
+      nextRaw = nextRaw.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, 'g'), `{{${binding.fieldKey}}}`);
+    }
+    urlRecord.raw = nextRaw;
+  }
+
+  if (Array.isArray(urlRecord.variable)) {
+    urlRecord.variable = urlRecord.variable.map((entry) => {
+      const variable = asRecord(entry) ?? {};
+      const key = typeof variable.key === 'string' ? variable.key : '';
+      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+        variable.value = `{{${key}}}`;
+      }
+      return variable;
+    });
+  }
+
+  if (Array.isArray(urlRecord.query)) {
+    urlRecord.query = urlRecord.query.map((entry) => {
+      const query = asRecord(entry) ?? {};
+      const key = typeof query.key === 'string' ? query.key : '';
+      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+        query.value = `{{${key}}}`;
+      }
+      return query;
+    });
+  }
+}
+
+function updateRequestBody(request: JsonRecord, step: FlowStep): void {
+  const body = asRecord(request.body);
+  if (!body || body.mode !== 'raw' || typeof body.raw !== 'string') {
+    return;
+  }
+  let raw = body.raw;
+
+  try {
+    const json = JSON.parse(raw) as JsonRecord;
+    for (const binding of step.bindings) {
+      setNestedValue(json, binding.fieldKey, `{{${binding.fieldKey}}}`);
+    }
+    raw = JSON.stringify(json, null, 2);
+  } catch {
+    for (const binding of step.bindings) {
+      raw = raw.replace(new RegExp(`\"${binding.fieldKey}\"\\s*:\\s*\"[^\"]*\"`, 'g'), `"${binding.fieldKey}": "{{${binding.fieldKey}}}"`);
+    }
+  }
+  body.raw = raw;
+}
+
+function applyFlowScripts(item: JsonRecord, step: FlowStep): void {
+  const existingEvents = Array.isArray(item.event) ? item.event : [];
+  item.event = existingEvents
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is JsonRecord => Boolean(entry))
+    .filter((entry) => entry.listen !== 'prerequest' && entry.listen !== 'test');
+  (item.event as JsonRecord[]).push(createPreRequestEvent(step), createTestEvent(step));
+}
+
+function curateRequestItem(resolved: ResolvedRequest): JsonRecord {
+  const item = structuredClone(resolved.item);
+  item.name = resolved.step.name?.trim() || resolved.step.operationId;
+  const request = asRecord(item.request);
+  if (request) {
+    updateRequestUrl(request, resolved.step);
+    updateRequestBody(request, resolved.step);
+  }
+  applyFlowScripts(item, resolved.step);
+  return item;
+}
+
+export function buildCuratedSmokeCollection(
+  generatedCollection: JsonRecord,
+  flow: FlowDefinition,
+  resolvedRequests: ResolvedRequest[]
+): { collection: JsonRecord; bindingCount: number; extractCount: number; assertionCount: number } {
+  const collection = structuredClone(generatedCollection);
+  collection.name = `[Smoke] ${flow.name}`;
+  collection.item = [createSecretsResolverItem(), ...resolvedRequests.map(curateRequestItem)];
+
+  const bindingCount = flow.steps.reduce((sum, step) => sum + step.bindings.length, 0);
+  const extractCount = flow.steps.reduce((sum, step) => sum + step.extract.length, 0);
+  const assertionCount = flow.steps.reduce((sum, step) => sum + countAssertionsForStep(step), 0);
+
+  return {
+    collection,
+    bindingCount,
+    extractCount,
+    assertionCount
+  };
+}

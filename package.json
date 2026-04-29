@@ -1,0 +1,42 @@
+{
+  "name": "@postman-cse/onboarding-smoke-flow",
+  "version": "0.1.0",
+  "description": "Public open-alpha Postman smoke flow GitHub Action.",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "bin": {
+    "postman-smoke-flow": "dist/cli.cjs"
+  },
+  "files": [
+    "action.yml",
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run typecheck && rm -rf dist && esbuild src/main.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/main.cjs && esbuild src/cli.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/cli.cjs",
+    "check:dist": "npm run build && git diff --exit-code -- dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "github-action",
+    "postman"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postman-cs/postman-smoke-flow-action"
+  }
+}

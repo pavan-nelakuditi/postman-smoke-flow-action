@@ -1,0 +1,84 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import { runSmokeFlow } from '../src/index.js';
+import type { ActionInputs, CoreLike } from '../src/types.js';
+
+function createInputs(tempDir: string): ActionInputs {
+  writeFileSync(
+    path.join(tempDir, 'flow.yaml'),
+    [
+      'flows:',
+      '  - name: Payments API happy path',
+      '    type: smoke',
+      '    steps:',
+      '      - stepKey: create-payment-1',
+      '        operationId: createPayment',
+      '        bindings: []',
+      '        extract:',
+      '          - variable: createPayment.paymentId',
+      '            jsonPath: $.paymentId'
+    ].join('\n')
+  );
+
+  return {
+    projectName: 'payments',
+    workspaceId: 'ws-123',
+    specId: 'spec-123',
+    smokeCollectionId: 'col-smoke',
+    flowPath: 'flow.yaml',
+    postmanApiKey: 'PMAK-123',
+    collectionSyncMode: 'refresh',
+    failOnFlowWarning: false,
+    keepTempCollectionOnFailure: false,
+    tempCollectionPrefix: '[Smoke][Temp]'
+  };
+}
+
+describe('runSmokeFlow', () => {
+  it('generates a temp collection, refreshes the canonical smoke collection, and cleans up', async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'smoke-flow-action-'));
+    const previousCwd = process.cwd();
+    process.chdir(tempDir);
+
+    const core: CoreLike = {
+      setOutput: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+      setFailed: vi.fn()
+    };
+
+    const postman = {
+      generateCollection: vi.fn().mockResolvedValue('temp-123'),
+      getCollection: vi.fn().mockResolvedValue({
+        info: { name: '[Smoke][Temp] payments' },
+        item: [
+          {
+            name: 'createPayment',
+            request: {
+              method: 'POST',
+              url: 'https://api.example.com/payments'
+            }
+          }
+        ]
+      }),
+      updateCollection: vi.fn().mockResolvedValue(undefined),
+      deleteCollection: vi.fn().mockResolvedValue(undefined)
+    };
+
+    try {
+      const outputs = await runSmokeFlow(createInputs(tempDir), { core, postman });
+      expect(outputs['smoke-collection-id']).toBe('col-smoke');
+      expect(outputs['flow-apply-status']).toBe('success');
+      expect(postman.generateCollection).toHaveBeenCalledOnce();
+      expect(postman.updateCollection).toHaveBeenCalledOnce();
+      expect(postman.deleteCollection).toHaveBeenCalledWith('temp-123');
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});

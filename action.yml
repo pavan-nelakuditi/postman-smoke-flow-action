@@ -1,0 +1,65 @@
+name: postman-smoke-flow-action
+description: Public open-alpha GitHub Action that applies a curated flow.yaml to the canonical Smoke collection.
+inputs:
+  project-name:
+    description: Service project name used for temporary smoke collection naming.
+    required: true
+  workspace-id:
+    description: Postman workspace ID produced by bootstrap.
+    required: true
+  spec-id:
+    description: Postman spec ID produced by bootstrap.
+    required: true
+  smoke-collection-id:
+    description: Canonical Smoke collection ID to refresh in place.
+    required: true
+  flow-path:
+    description: Repo-root-relative path to the curated flow.yaml manifest.
+    required: true
+  postman-api-key:
+    description: Postman API key used for collection generation and mutation.
+    required: true
+  spec-path:
+    description: Optional repo-root-relative path to the local OpenAPI spec for validation and debug context.
+    required: false
+  collection-sync-mode:
+    description: Collection lifecycle policy. Refresh is the supported v1 mode.
+    required: false
+    default: refresh
+  postman-access-token:
+    description: Optional Postman access token for future internal integrations.
+    required: false
+  fail-on-flow-warning:
+    description: Whether non-blocking flow warnings should fail the action.
+    required: false
+    default: "false"
+  keep-temp-collection-on-failure:
+    description: Whether to keep the generated temporary smoke collection for debugging after a failed apply.
+    required: false
+    default: "false"
+  temp-collection-prefix:
+    description: Prefix used when generating the temporary smoke collection from the spec.
+    required: false
+    default: "[Smoke][Temp]"
+outputs:
+  smoke-collection-id:
+    description: Canonical Smoke collection ID after curated flow application.
+  flow-apply-status:
+    description: Flow apply result status.
+  flow-apply-summary-json:
+    description: JSON summary of flow application results and warnings.
+  temporary-smoke-collection-id:
+    description: Temporary generated smoke collection ID used during apply.
+  flow-step-count:
+    description: Number of steps in the applied flow.
+  resolved-operation-count:
+    description: Number of flow steps resolved to generated requests.
+  applied-binding-count:
+    description: Number of bindings applied as prerequest logic.
+  applied-extract-count:
+    description: Number of extracts applied as test logic.
+  assertion-count:
+    description: Number of generated assertions applied across flow steps.
+runs:
+  using: node24
+  main: dist/main.cjs

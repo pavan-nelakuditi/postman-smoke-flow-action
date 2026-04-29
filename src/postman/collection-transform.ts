@@ -7,6 +7,25 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
 
+function sanitizeForCollectionUpdate(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForCollectionUpdate);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const record = value as JsonRecord;
+  const next: JsonRecord = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key === 'uid' || key === '_postman_id') {
+      continue;
+    }
+    next[key] = sanitizeForCollectionUpdate(child);
+  }
+  return next;
+}
+
 function setNestedValue(root: JsonRecord, dottedKey: string, value: unknown): void {
   const segments = dottedKey.split('.');
   let cursor: JsonRecord = root;
@@ -125,8 +144,11 @@ export function buildCuratedSmokeCollection(
   flow: FlowDefinition,
   resolvedRequests: ResolvedRequest[]
 ): { collection: JsonRecord; bindingCount: number; extractCount: number; assertionCount: number } {
-  const collection = structuredClone(generatedCollection);
-  collection.name = `[Smoke] ${flow.name}`;
+  const collection = sanitizeForCollectionUpdate(structuredClone(generatedCollection)) as JsonRecord;
+  const info = asRecord(collection.info);
+  if (info) {
+    info.name = `[Smoke] ${flow.name}`;
+  }
   collection.item = [createSecretsResolverItem(), ...resolvedRequests.map(curateRequestItem)];
 
   const bindingCount = flow.steps.reduce((sum, step) => sum + step.bindings.length, 0);

@@ -27505,6 +27505,23 @@ function createSecretsResolverItem() {
 function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
+function sanitizeForCollectionUpdate(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForCollectionUpdate);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const record = value;
+  const next = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "uid" || key === "_postman_id") {
+      continue;
+    }
+    next[key] = sanitizeForCollectionUpdate(child);
+  }
+  return next;
+}
 function setNestedValue(root, dottedKey, value) {
   const segments = dottedKey.split(".");
   let cursor = root;
@@ -27605,8 +27622,11 @@ function curateRequestItem(resolved) {
   return item;
 }
 function buildCuratedSmokeCollection(generatedCollection, flow, resolvedRequests) {
-  const collection = structuredClone(generatedCollection);
-  collection.name = `[Smoke] ${flow.name}`;
+  const collection = sanitizeForCollectionUpdate(structuredClone(generatedCollection));
+  const info = asRecord2(collection.info);
+  if (info) {
+    info.name = `[Smoke] ${flow.name}`;
+  }
   collection.item = [createSecretsResolverItem(), ...resolvedRequests.map(curateRequestItem)];
   const bindingCount = flow.steps.reduce((sum, step) => sum + step.bindings.length, 0);
   const extractCount = flow.steps.reduce((sum, step) => sum + step.extract.length, 0);

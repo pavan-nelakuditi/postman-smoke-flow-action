@@ -22,8 +22,9 @@ function parseBooleanInput(value: string | undefined, defaultValue: boolean): bo
 }
 
 function getInput(name: string, env: NodeJS.ProcessEnv): string {
-  const envName = `INPUT_${name.replace(/ /g, '_').replace(/-/g, '_').toUpperCase()}`;
-  return String(env[envName] ?? '').trim();
+  const canonicalEnvName = `INPUT_${name.replace(/ /g, '_').toUpperCase()}`;
+  const legacyEnvName = `INPUT_${name.replace(/ /g, '_').replace(/-/g, '_').toUpperCase()}`;
+  return String(env[canonicalEnvName] ?? env[legacyEnvName] ?? '').trim();
 }
 
 export function readActionInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {

@@ -23,11 +23,16 @@ function setNestedValue(root: JsonRecord, dottedKey: string, value: unknown): vo
   cursor[segments[segments.length - 1]!] = value;
 }
 
+function getVariableBindings(step: FlowStep) {
+  return step.bindings.filter((binding) => binding.source !== 'example');
+}
+
 function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
+  const variableBindings = getVariableBindings(step);
   const url = request.url;
   if (typeof url === 'string') {
     let next = url;
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       next = next.replace(new RegExp(`\\{${binding.fieldKey}\\}`, 'g'), `{{${binding.fieldKey}}}`);
       next = next.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, 'g'), `{{${binding.fieldKey}}}`);
     }
@@ -42,7 +47,7 @@ function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
 
   if (typeof urlRecord.raw === 'string') {
     let nextRaw = urlRecord.raw;
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       nextRaw = nextRaw.replace(new RegExp(`\\{${binding.fieldKey}\\}`, 'g'), `{{${binding.fieldKey}}}`);
       nextRaw = nextRaw.replace(new RegExp(`:${binding.fieldKey}(?=[/?&#]|$)`, 'g'), `{{${binding.fieldKey}}}`);
     }
@@ -53,7 +58,7 @@ function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
     urlRecord.variable = urlRecord.variable.map((entry) => {
       const variable = asRecord(entry) ?? {};
       const key = typeof variable.key === 'string' ? variable.key : '';
-      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+      if (variableBindings.some((binding) => binding.fieldKey === key)) {
         variable.value = `{{${key}}}`;
       }
       return variable;
@@ -64,7 +69,7 @@ function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
     urlRecord.query = urlRecord.query.map((entry) => {
       const query = asRecord(entry) ?? {};
       const key = typeof query.key === 'string' ? query.key : '';
-      if (step.bindings.some((binding) => binding.fieldKey === key)) {
+      if (variableBindings.some((binding) => binding.fieldKey === key)) {
         query.value = `{{${key}}}`;
       }
       return query;
@@ -73,6 +78,7 @@ function updateRequestUrl(request: JsonRecord, step: FlowStep): void {
 }
 
 function updateRequestBody(request: JsonRecord, step: FlowStep): void {
+  const variableBindings = getVariableBindings(step);
   const body = asRecord(request.body);
   if (!body || body.mode !== 'raw' || typeof body.raw !== 'string') {
     return;
@@ -81,12 +87,12 @@ function updateRequestBody(request: JsonRecord, step: FlowStep): void {
 
   try {
     const json = JSON.parse(raw) as JsonRecord;
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       setNestedValue(json, binding.fieldKey, `{{${binding.fieldKey}}}`);
     }
     raw = JSON.stringify(json, null, 2);
   } catch {
-    for (const binding of step.bindings) {
+    for (const binding of variableBindings) {
       raw = raw.replace(new RegExp(`\"${binding.fieldKey}\"\\s*:\\s*\"[^\"]*\"`, 'g'), `"${binding.fieldKey}": "{{${binding.fieldKey}}}"`);
     }
   }

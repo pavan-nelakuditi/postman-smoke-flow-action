@@ -49,9 +49,14 @@ export function validateFlowManifest(manifest: FlowManifest): { flow: FlowDefini
           `Step ${step.stepKey} binding ${binding.fieldKey} must include sourceStepKey and variable when using prior_output.`
         );
       }
-      if ((binding.source === 'literal' || binding.source === 'example') && binding.value === undefined) {
+      if (binding.source === 'literal' && binding.value === undefined) {
+        throw new ValidationError(
+          `Step ${step.stepKey} binding ${binding.fieldKey} must include value when using literal source.`
+        );
+      }
+      if (binding.source === 'example' && binding.value !== undefined) {
         warnings.push({
-          message: `Step ${step.stepKey} binding ${binding.fieldKey} has no explicit value; the generated request may rely on existing scaffold defaults.`
+          message: `Step ${step.stepKey} binding ${binding.fieldKey} uses source=example; explicit value is ignored and the generated request example is preserved.`
         });
       }
     }

@@ -33,7 +33,7 @@ export function buildPreRequestScript(step: FlowStep): string[] {
       lines.push(`pm.collectionVariables.set(${quote(binding.fieldKey)}, pm.collectionVariables.get(${quote(binding.variable)}) || '');`);
       continue;
     }
-    if (binding.source === 'literal' || binding.source === 'example') {
+    if (binding.source === 'literal') {
       lines.push(`pm.collectionVariables.set(${quote(binding.fieldKey)}, ${quote(binding.value ?? '')});`);
     }
   }

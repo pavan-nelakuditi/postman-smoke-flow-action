@@ -37,4 +37,34 @@ describe('flow parser and validator', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('requires literal bindings to provide a value', () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'smoke-flow-'));
+    const flowPath = path.join(tempDir, 'flow.yaml');
+    writeFileSync(
+      flowPath,
+      [
+        'flows:',
+        '  - name: Payments API happy path',
+        '    type: smoke',
+        '    steps:',
+        '      - stepKey: create-payment-1',
+        '        operationId: createPayment',
+        '        bindings:',
+        '          - fieldKey: amount',
+        '            source: literal',
+        '        extract: []'
+      ].join('\n')
+    );
+
+    const previousCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const manifest = loadFlowManifest('flow.yaml');
+      expect(() => validateFlowManifest(manifest)).toThrow(/must include value when using literal source/);
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

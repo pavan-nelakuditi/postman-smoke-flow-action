@@ -72,4 +72,54 @@ describe('collection transform', () => {
     expect(JSON.stringify(items[2])).toContain('{{paymentId}}');
     expect(JSON.stringify(items[1])).toContain('Extract createPayment.paymentId');
   });
+
+  it('preserves generated example values for source=example bindings', () => {
+    const exampleFlow: FlowDefinition = {
+      name: 'Remote POS happy path',
+      type: 'smoke',
+      steps: [
+        {
+          stepKey: 'create-remote-invoice-1',
+          operationId: 'createRemoteInvoice',
+          bindings: [
+            {
+              fieldKey: 'customer.customerNumber',
+              source: 'example'
+            }
+          ],
+          extract: [{ variable: 'createRemoteInvoice.invoiceNumber', jsonPath: '$.invoiceNumber' }]
+        }
+      ]
+    };
+
+    const generatedCollection = {
+      info: { name: '[Smoke][Temp] Remote POS API' },
+      item: []
+    };
+    const resolvedRequests: ResolvedRequest[] = [
+      {
+        step: exampleFlow.steps[0]!,
+        item: {
+          name: 'createRemoteInvoice',
+          request: {
+            method: 'POST',
+            url: 'https://api.example.com/remote-invoices',
+            body: {
+              mode: 'raw',
+              raw: '{"customer":{"customerNumber":90001234},"delivery":true}'
+            }
+          }
+        }
+      }
+    ];
+
+    const result = buildCuratedSmokeCollection(generatedCollection, exampleFlow, resolvedRequests);
+    const items = result.collection.item as Array<Record<string, unknown>>;
+    const requestBody = JSON.stringify((items[1] as Record<string, unknown>).request);
+    const prerequest = JSON.stringify((items[1] as Record<string, unknown>).event);
+
+    expect(requestBody).toContain('90001234');
+    expect(requestBody).not.toContain('{{customer.customerNumber}}');
+    expect(prerequest).not.toContain('customer.customerNumber');
+  });
 });

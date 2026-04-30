@@ -116,6 +116,7 @@ flows:
 
 ## Notes
 
-- The action assumes the generated spec-derived collection uses request names or summaries that can be matched to `operationId`.
+- The action first tries to resolve each flow step by matching the generated request name or description to the step `operationId`.
+- If `spec-path` is provided, it can also fall back to matching by request method plus normalized path shape from the OpenAPI document.
 - In v1, one `flow.yaml` maps to one curated Smoke collection journey.
 - This action intentionally does not mutate baseline or contract collections.

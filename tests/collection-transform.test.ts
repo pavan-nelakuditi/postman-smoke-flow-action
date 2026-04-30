@@ -42,6 +42,8 @@ describe('collection transform', () => {
         step: flow.steps[0]!,
         item: {
           name: 'createPayment',
+          id: '11111111-1111-1111-1111-111111111111',
+          uid: '54270406-11111111-1111-1111-1111-111111111111',
           request: {
             method: 'POST',
             url: 'https://api.example.com/payments',
@@ -49,17 +51,21 @@ describe('collection transform', () => {
               mode: 'raw',
               raw: '{"amount":"10"}'
             }
-          }
+          },
+          response: [{ id: 'resp-123' }]
         }
       },
       {
         step: flow.steps[1]!,
         item: {
           name: 'getPaymentById',
+          id: '22222222-2222-2222-2222-222222222222',
+          uid: '54270406-22222222-2222-2222-2222-222222222222',
           request: {
             method: 'GET',
             url: 'https://api.example.com/payments/{paymentId}'
-          }
+          },
+          response: [{ id: 'resp-456' }]
         }
       }
     ];
@@ -75,6 +81,12 @@ describe('collection transform', () => {
     expect((result.collection as Record<string, unknown>).response).toBeUndefined();
     expect(items[0]?.name).toBe('00 - Resolve Secrets');
     expect(items[2]?.request).toBeDefined();
+    expect((items[1] as Record<string, unknown>).id).toBeUndefined();
+    expect((items[1] as Record<string, unknown>).uid).toBeUndefined();
+    expect((items[1] as Record<string, unknown>).response).toBeUndefined();
+    expect((items[2] as Record<string, unknown>).id).toBeUndefined();
+    expect((items[2] as Record<string, unknown>).uid).toBeUndefined();
+    expect((items[2] as Record<string, unknown>).response).toBeUndefined();
     expect(JSON.stringify(items[2])).toContain('{{paymentId}}');
     expect(JSON.stringify(items[1])).toContain('Extract createPayment.paymentId');
   });

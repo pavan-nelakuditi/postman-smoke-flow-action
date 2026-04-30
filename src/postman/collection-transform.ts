@@ -159,13 +159,14 @@ export function buildCuratedSmokeCollection(
     info.name = `[Smoke] ${flow.name}`;
   }
   collection.item = [createSecretsResolverItem(), ...resolvedRequests.map(curateRequestItem)];
+  const sanitizedCollection = sanitizeForCollectionUpdate(collection) as JsonRecord;
 
   const bindingCount = flow.steps.reduce((sum, step) => sum + step.bindings.length, 0);
   const extractCount = flow.steps.reduce((sum, step) => sum + step.extract.length, 0);
   const assertionCount = flow.steps.reduce((sum, step) => sum + countAssertionsForStep(step), 0);
 
   return {
-    collection,
+    collection: sanitizedCollection,
     bindingCount,
     extractCount,
     assertionCount

@@ -34,6 +34,7 @@ function getRequestMethod(item: CollectionItem): string {
 
 function normalizePathTemplate(value: string): string {
   return value
+    .replace(/[?#].*$/, '')
     .replace(/^https?:\/\/[^/]+/i, '')
     .replace(/^\{\{[^}]+\}\}/, '')
     .replace(/:[^/]+/g, '{}')

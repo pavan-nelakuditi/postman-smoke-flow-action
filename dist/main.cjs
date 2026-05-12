@@ -27213,7 +27213,7 @@ function getRequestMethod(item) {
   return typeof request?.method === "string" ? request.method.toUpperCase() : "";
 }
 function normalizePathTemplate(value) {
-  return value.replace(/^https?:\/\/[^/]+/i, "").replace(/^\{\{[^}]+\}\}/, "").replace(/:[^/]+/g, "{}").replace(/\{[^/]+\}/g, "{}").replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+  return value.replace(/[?#].*$/, "").replace(/^https?:\/\/[^/]+/i, "").replace(/^\{\{[^}]+\}\}/, "").replace(/:[^/]+/g, "{}").replace(/\{[^/]+\}/g, "{}").replace(/\/+/g, "/").replace(/\/$/, "") || "/";
 }
 function getRequestPath(item) {
   const request = asRecord(item.request);

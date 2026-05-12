@@ -140,6 +140,47 @@ describe('runSmokeFlow', () => {
     }
   });
 
+  it('ignores generated request query strings when matching operation paths', async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'smoke-flow-action-'));
+    const previousCwd = process.cwd();
+    process.chdir(tempDir);
+
+    const core: CoreLike = {
+      setOutput: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+      setFailed: vi.fn()
+    };
+
+    const postman = {
+      generateCollection: vi.fn().mockResolvedValue('temp-123'),
+      getCollection: vi.fn().mockResolvedValue({
+        info: { name: '[Smoke][Temp] payments' },
+        item: [
+          {
+            name: 'Create a payment',
+            request: {
+              method: 'POST',
+              url: 'https://api.example.com/payments?scenario={{scenario}}#example'
+            }
+          }
+        ]
+      }),
+      updateCollection: vi.fn().mockResolvedValue(undefined),
+      deleteCollection: vi.fn().mockResolvedValue(undefined)
+    };
+
+    try {
+      const outputs = await runSmokeFlow(createInputs(tempDir), { core, postman });
+      expect(outputs['smoke-collection-id']).toBe('col-smoke');
+      expect(outputs['flow-apply-status']).toBe('success');
+      expect(postman.updateCollection).toHaveBeenCalledOnce();
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('writes a transformed collection debug dump when debug-dump-path is provided', async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'smoke-flow-action-'));
     const previousCwd = process.cwd();
